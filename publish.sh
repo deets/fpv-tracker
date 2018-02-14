@@ -1,3 +1,6 @@
 #!/bin/bash
 set -x
-ampy --port /dev/ttyUSB0 put *.py
+for fname in *.py
+do
+    ampy --port /dev/ttyUSB0 put $fname
+done
