@@ -18,16 +18,18 @@ class RSSIRenderer(QtCore.QObject):
 
         self._scene = QtWidgets.QGraphicsScene(self._view)
 
+        pen_width = self._view.width() * .9 / self._history_length
+
         path = QtGui.QPainterPath()
         path.moveTo(-10, 0)
         path.lineTo(0, 1023)
         pen = QtGui.QPen()
-        pen.setWidth(2 / 60)
+        pen.setWidth(2 / pen_width)
         pen.setColor(QtGui.QColor(0, 255, 0))
         self._right_item = self._scene.addPath(path, pen)
 
         pen = QtGui.QPen()
-        pen.setWidth(2 / 60)
+        pen.setWidth(2 / pen_width)
         pen.setColor(QtGui.QColor(255, 0, 0))
         self._left_item = self._scene.addPath(QtGui.QPainterPath(), pen)
         self._view.setScene(self._scene)
