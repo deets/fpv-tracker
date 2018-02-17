@@ -44,7 +44,6 @@ class RSSIRenderer(QtCore.QObject):
     def _fit_view(self):
         t = QtGui.QTransform()
         sx, sy = self._view.width() / self._history_length, -self._view.height() / 1024,
-        print(self._view.objectName(), sx, sy)
         t.scale(sx, sy)
         self._view.setTransform(t)
 
@@ -97,7 +96,7 @@ def main():
         protocol,
         main_window.right_rssi_view,
         QtGui.QColor(255, 0, 0),
-        lambda message: message[0]
+        lambda message: message[2]
     )
     sys.exit(app.exec_())
 
