@@ -1,85 +1,77 @@
 import sys
-import struct
+import bisect
 
-from PyQt5 import QtGui, QtSvg, QtWidgets, QtSerialPort, QtCore
+from PyQt5 import QtGui, QtSvg, QtWidgets, QtCore
 
-class SerialPortReader(QtCore.QObject):
+from .communication import SerialPortReader, SerialProtocol
 
-    TIMEOUT = 5000
 
-    def __init__(self, protocol, port, parent=None):
+class RSSIRenderer(QtCore.QObject):
+
+    def __init__(self, protocol, view, history_length=10, parent=None):
         super().__init__(parent)
-        self._port = port
-        self._port.readyRead.connect(self._handle_ready_read)
-        self._port.error.connect(self._handle_error)
-        self._protocol = protocol
+        protocol.status_message.connect(self._status_message)
+        self._view = view
+        self._history_length = history_length
+        self._latest_timestamp = None
+        self._messages = []
+
+        self._scene = QtWidgets.QGraphicsScene(self._view)
+
+        pen = QtGui.QPen()
+        pen.setWidth(2)
+        pen.setColor(QtGui.QColor(0, 255, 0))
+        self._right_item = self._scene.addPath(QtGui.QPainterPath(), pen)
+
+        pen = QtGui.QPen()
+        pen.setWidth(2)
+        pen.setColor(QtGui.QColor(255, 0, 0))
+        self._left_item = self._scene.addPath(QtGui.QPainterPath(), pen)
+
+        self._view.setScene(self._scene)
+        self._view.scale(700.0 / history_length, 600 / 1024.0)
 
 
-    def _handle_ready_read(self):
-        self._protocol.feed(self._port.readAll())
+    def _status_message(self, message):
+        ts, angle, left, right = message
+        ts /= 1000.0
+        self._latest_timestamp = ts
+        cutoff = ts - self._history_length
+        self._messages.append((ts, left, right))
+        index = bisect.bisect_left(
+            self._messages,
+            (cutoff, -1, -1),
+        )
+        self._messages = self._messages[index:]
+        if len(self._messages):
+            left_path, right_path = QtGui.QPainterPath(), QtGui.QPainterPath()
+            s = self._messages[0]
 
+            left_path.moveTo(s[0] - ts, s[1])
+            right_path.moveTo(s[0] - ts, s[2])
 
-    def _handle_error(self, error):
-        print("error occured", error)
-
-
-class SerialProtocol:
-    PAYLOAD = "IfHH"
-    LAYOUT =  PAYLOAD + "B"
-
-    def __init__(self):
-        self._buffer = b""
-
-
-    def feed(self, data):
-        self._buffer += bytes(data)
-        while self._buffer:
-            pos = self._buffer.index(b"{")
-            end = pos + struct.calcsize(self.LAYOUT) + 1
-            try:
-                right_boundary = chr(self._buffer[end])
-            except IndexError:
-                # we don't have yet enough data, just
-                # break
-                break
-            else:
-                if right_boundary == '}':
-                    self._parse_message(self._buffer[pos+1:end])
-                    self._buffer = self._buffer[end+1:]
-                else:
-                    # we didn't arrive at a correct boundary,
-                    # lets throw away the data in question
-                    self._buffer = self._buffer[pos+1:]
-
-
-    def _parse_message(self, message):
-        crc = message[-1]
-        h = 0
-        for c in message[:-1]:
-            h += c
-        h = h & 0xff
-        if h == crc:
-            # successfully decoded a message
-            print(struct.unpack(self.PAYLOAD, message[:-1]))
+            for p in self._messages[1:]:
+                left_path.lineTo(p[0] - ts, p[1])
+                right_path.lineTo(p[0] - ts, p[2])
+            print(left_path.boundingRect())
+            self._left_item.setPath(left_path)
+            self._right_item.setPath(right_path)
+            self._scene.update()
 
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    port_info = [
-        port for port in QtSerialPort.QSerialPortInfo.availablePorts()
-        if "arduino" in port.manufacturer().lower()
-        ][0]
-    print(port_info.systemLocation())
-
-    port = QtSerialPort.QSerialPort(port_info)
-    port.open(QtCore.QIODevice.ReadWrite)
 
     protocol = SerialProtocol()
-    reader = SerialPortReader(protocol, port)
+    reader = SerialPortReader.open_default_port(protocol)
 
-    svgWidget = QtSvg.QSvgWidget('NASA_Logo.svg')
-    svgWidget.setGeometry(50,50,759,668)
-    svgWidget.show()
+    # svgWidget = QtSvg.QSvgWidget('NASA_Logo.svg')
+    # svgWidget.setGeometry(50,50,759,668)
+    # svgWidget.show()
+    gv = QtWidgets.QGraphicsView()
+    gv.setGeometry(50,50,700,600)
+    gv.show()
+    renderer = RSSIRenderer(protocol, gv)
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
