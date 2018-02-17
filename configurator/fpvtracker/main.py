@@ -30,15 +30,25 @@ class RSSIRenderer(QtCore.QObject):
         pen.setWidth(2 / 60)
         pen.setColor(QtGui.QColor(255, 0, 0))
         self._left_item = self._scene.addPath(QtGui.QPainterPath(), pen)
-
         self._view.setScene(self._scene)
+        self._view.installEventFilter(self)
+        self._fit_view()
 
+
+    def eventFilter(self, view, event):
+        if event.type() == QtCore.QEvent.Resize:
+            self._fit_view()
+        return False
+
+
+    def _fit_view(self):
         t = QtGui.QTransform()
         t.scale(
-            self._view.width() * .9 / history_length,
+            self._view.width() * .9 / self._history_length,
             -self._view.height() * .9 / 1024,
         )
         self._view.setTransform(t)
+
 
     def _status_message(self, message):
         ts, angle, left, right = message
