@@ -1,15 +1,18 @@
+import os
 import sys
 import bisect
 
 from PyQt5 import QtGui, QtSvg, QtWidgets, QtCore
+from PyQt5.uic import loadUi
 
 from .communication import SerialPortReader, SerialProtocol
 
 
 class RSSIRenderer(QtCore.QObject):
 
-    def __init__(self, protocol, view, history_length=10, parent=None):
+    def __init__(self, protocol, view, color, selector, history_length=10, parent=None):
         super().__init__(parent)
+        self._selector = selector
         protocol.status_message.connect(self._status_message)
         self._view = view
         self._history_length = history_length
@@ -25,13 +28,8 @@ class RSSIRenderer(QtCore.QObject):
         path.lineTo(0, 1023)
         pen = QtGui.QPen()
         pen.setWidth(2 / pen_width)
-        pen.setColor(QtGui.QColor(0, 255, 0))
-        self._right_item = self._scene.addPath(path, pen)
-
-        pen = QtGui.QPen()
-        pen.setWidth(2 / pen_width)
-        pen.setColor(QtGui.QColor(255, 0, 0))
-        self._left_item = self._scene.addPath(QtGui.QPainterPath(), pen)
+        pen.setColor(color)
+        self._item = self._scene.addPath(path, pen)
         self._view.setScene(self._scene)
         self._view.installEventFilter(self)
         self._fit_view()
@@ -45,10 +43,9 @@ class RSSIRenderer(QtCore.QObject):
 
     def _fit_view(self):
         t = QtGui.QTransform()
-        t.scale(
-            self._view.width() * .9 / self._history_length,
-            -self._view.height() * .9 / 1024,
-        )
+        sx, sy = self._view.width() / self._history_length, -self._view.height() / 1024,
+        print(self._view.objectName(), sx, sy)
+        t.scale(sx, sy)
         self._view.setTransform(t)
 
 
@@ -64,23 +61,19 @@ class RSSIRenderer(QtCore.QObject):
         )
         self._messages = self._messages[index:]
 
+
         if len(self._messages):
-            left_path, right_path = QtGui.QPainterPath(), QtGui.QPainterPath()
+            path = QtGui.QPainterPath()
             s = self._messages[0]
+            sel = self._selector
 
-            left_path.moveTo(s[0] - ts, s[1])
-            right_path.moveTo(s[0] - ts, s[2])
+            path.moveTo(s[0] - ts, sel(s))
 
-            h = []
             for p in self._messages[1:]:
                 x = p[0] - ts
-                h.append(x)
-                left_path.lineTo(x, p[1])
-                right_path.lineTo(x, p[2])
-            #print(left_path.boundingRect())
+                path.lineTo(x, sel(p))
 
-            self._left_item.setPath(left_path)
-            self._right_item.setPath(right_path)
+            self._item.setPath(path)
             self._scene.update()
 
 
@@ -90,13 +83,22 @@ def main():
     protocol = SerialProtocol()
     reader = SerialPortReader.open_default_port(protocol)
 
-    # svgWidget = QtSvg.QSvgWidget('NASA_Logo.svg')
-    # svgWidget.setGeometry(50,50,759,668)
-    # svgWidget.show()
-    gv = QtWidgets.QGraphicsView()
-    gv.setGeometry(50,50,700,600)
-    gv.show()
-    renderer = RSSIRenderer(protocol, gv)
+    main_window = QtWidgets.QMainWindow()
+    loadUi(os.path.join(os.path.dirname(__file__), "mainwindow.ui"), main_window)
+
+    main_window.show()
+    left_renderer = RSSIRenderer(
+        protocol,
+        main_window.left_rssi_view,
+        QtGui.QColor(0, 255, 0),
+        lambda message: message[1]
+    )
+    right_renderer = RSSIRenderer(
+        protocol,
+        main_window.right_rssi_view,
+        QtGui.QColor(255, 0, 0),
+        lambda message: message[0]
+    )
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
