@@ -54,7 +54,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QLineEdit" name="rightRSSImin">
+          <widget class="QLineEdit" name="right_rssi_min">
            <property name="enabled">
             <bool>false</bool>
            </property>
@@ -68,7 +68,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QLineEdit" name="rightRSSImax">
+          <widget class="QLineEdit" name="right_rssi_max">
            <property name="enabled">
             <bool>false</bool>
            </property>
@@ -137,7 +137,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QLineEdit" name="leftRSSImin">
+          <widget class="QLineEdit" name="left_rssi_min">
            <property name="enabled">
             <bool>false</bool>
            </property>
@@ -151,7 +151,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QLineEdit" name="leftRSSImax">
+          <widget class="QLineEdit" name="left_rssi_max">
            <property name="enabled">
             <bool>false</bool>
            </property>

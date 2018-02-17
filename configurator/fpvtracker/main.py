@@ -9,6 +9,7 @@ from .communication import SerialPortReader, SerialProtocol
 
 
 class RSSIRenderer(QtCore.QObject):
+    MARGIN = 0.95
 
     def __init__(self, protocol, view, color, selector, history_length=10, parent=None):
         super().__init__(parent)
@@ -43,7 +44,7 @@ class RSSIRenderer(QtCore.QObject):
 
     def _fit_view(self):
         t = QtGui.QTransform()
-        sx, sy = self._view.width() / self._history_length, -self._view.height() / 1024,
+        sx, sy = self._view.width() / self._history_length, -self._view.height() * self.MARGIN / 1024,
         t.scale(sx, sy)
         self._view.setTransform(t)
 
@@ -76,6 +77,37 @@ class RSSIRenderer(QtCore.QObject):
             self._scene.update()
 
 
+class MinMaxer(QtCore.QObject):
+
+    min_changed = QtCore.pyqtSignal(float)
+    max_changed = QtCore.pyqtSignal(float)
+
+    def __init__(self, transformer=lambda x: x):
+        super().__init__()
+        self._transformer = transformer
+        self._min, self._max = None, None
+
+
+    def value(self, v):
+        v = self._transformer(v)
+        changed = False
+        if self._min is None:
+            self._min = v
+            changed = True
+        if self._max is None:
+            self._max = v
+            changed = True
+
+        new_min = min(v, self._min)
+        new_max = max(v, self._max)
+        changed |= new_min != self._min or new_max != self._max
+        self._min = new_min
+        self._max = new_max
+        if changed:
+            self.min_changed.emit(self._min)
+            self.max_changed.emit(self._max)
+
+
 def main():
     app = QtWidgets.QApplication(sys.argv)
 
@@ -86,18 +118,33 @@ def main():
     loadUi(os.path.join(os.path.dirname(__file__), "mainwindow.ui"), main_window)
 
     main_window.show()
+
+    left_value = lambda message: message[1]
+    right_value = lambda message: message[2]
+
     left_renderer = RSSIRenderer(
         protocol,
         main_window.left_rssi_view,
         QtGui.QColor(0, 255, 0),
-        lambda message: message[1]
+        left_value,
     )
     right_renderer = RSSIRenderer(
         protocol,
         main_window.right_rssi_view,
         QtGui.QColor(255, 0, 0),
-        lambda message: message[2]
+        right_value,
     )
+
+    left_mm = MinMaxer(lambda message: message[2])
+    protocol.status_message.connect(left_mm.value)
+    left_mm.min_changed.connect(lambda v: main_window.left_rssi_min.setText(str(v)))
+    left_mm.max_changed.connect(lambda v: main_window.left_rssi_max.setText(str(v)))
+
+    right_mm = MinMaxer(lambda message: message[3])
+    protocol.status_message.connect(right_mm.value)
+    right_mm.min_changed.connect(lambda v: main_window.right_rssi_min.setText(str(v)))
+    right_mm.max_changed.connect(lambda v: main_window.right_rssi_max.setText(str(v)))
+
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
