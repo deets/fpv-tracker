@@ -18,19 +18,27 @@ class RSSIRenderer(QtCore.QObject):
 
         self._scene = QtWidgets.QGraphicsScene(self._view)
 
+        path = QtGui.QPainterPath()
+        path.moveTo(-10, 0)
+        path.lineTo(0, 1023)
         pen = QtGui.QPen()
-        pen.setWidth(2)
+        pen.setWidth(2 / 60)
         pen.setColor(QtGui.QColor(0, 255, 0))
-        self._right_item = self._scene.addPath(QtGui.QPainterPath(), pen)
+        self._right_item = self._scene.addPath(path, pen)
 
         pen = QtGui.QPen()
-        pen.setWidth(2)
+        pen.setWidth(2 / 60)
         pen.setColor(QtGui.QColor(255, 0, 0))
         self._left_item = self._scene.addPath(QtGui.QPainterPath(), pen)
 
         self._view.setScene(self._scene)
-        self._view.scale(700.0 / history_length, 600 / 1024.0)
 
+        t = QtGui.QTransform()
+        t.scale(
+            self._view.width() * .9 / history_length,
+            -self._view.height() * .9 / 1024,
+        )
+        self._view.setTransform(t)
 
     def _status_message(self, message):
         ts, angle, left, right = message
@@ -43,6 +51,7 @@ class RSSIRenderer(QtCore.QObject):
             (cutoff, -1, -1),
         )
         self._messages = self._messages[index:]
+
         if len(self._messages):
             left_path, right_path = QtGui.QPainterPath(), QtGui.QPainterPath()
             s = self._messages[0]
@@ -50,10 +59,14 @@ class RSSIRenderer(QtCore.QObject):
             left_path.moveTo(s[0] - ts, s[1])
             right_path.moveTo(s[0] - ts, s[2])
 
+            h = []
             for p in self._messages[1:]:
-                left_path.lineTo(p[0] - ts, p[1])
-                right_path.lineTo(p[0] - ts, p[2])
-            print(left_path.boundingRect())
+                x = p[0] - ts
+                h.append(x)
+                left_path.lineTo(x, p[1])
+                right_path.lineTo(x, p[2])
+            #print(left_path.boundingRect())
+
             self._left_item.setPath(left_path)
             self._right_item.setPath(right_path)
             self._scene.update()
