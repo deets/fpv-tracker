@@ -91,16 +91,25 @@
 uint16_t rssi_left_array[FIR_SIZE];
 uint16_t rssi_right_array[FIR_SIZE];
 
-float anglePan = 90;
-boolean debug = false;
 
 Timer timer;
 Servo servoPan;
 
+struct State {
+  float anglePan;
+  uint16_t avgLeft;
+  uint16_t avgRight;
+};
+
+State state;
 
 void setup() {
   servoPan.attach(PAN_SERVO_PIN);
   servoPan.write(90);
+
+  state = {
+    .anglePan = 90.0
+  };
 
   // wipe array
   for (int i = 0; i < FIR_SIZE; i++) {
@@ -109,12 +118,6 @@ void setup() {
   }
 
   Serial.begin(115200);
-  while (!debug) {
-    delay(3000);
-    debug = true;
-  }
-
-
   timer.every(50, mainLoop);
   timer.every(5, measureRSSI);
 }
@@ -129,8 +132,8 @@ void loop() {
 
 void mainLoop() {
 
-  uint16_t avgLeft = max(avg(rssi_left_array, FIR_SIZE) + RSSI_OFFSET_LEFT, RSSI_MIN);
-  uint16_t avgRight = max(avg(rssi_right_array, FIR_SIZE) + RSSI_OFFSET_RIGHT, RSSI_MIN);
+  state.avgLeft = max(avg(rssi_left_array, FIR_SIZE) + RSSI_OFFSET_LEFT, RSSI_MIN);
+  state.avgRight = max(avg(rssi_right_array, FIR_SIZE) + RSSI_OFFSET_RIGHT, RSSI_MIN);
 
 //  If avg RSSI is above 90%, don't move
 //  if ((avgRight + avgLeft) / 2 > 360) {
@@ -141,59 +144,59 @@ void mainLoop() {
      the lower total RSSI is, the lower deadband gets
      allows more precise tracking when target is far away
   */
-  uint8_t dynamicDeadband = (float(avgRight + avgLeft) / 2 - RSSI_MIN) / (RSSI_MAX - RSSI_MIN) * DEADBAND;
+  uint8_t dynamicDeadband = (float(state.avgRight + state.avgLeft) / 2 - RSSI_MIN) / (RSSI_MAX - RSSI_MIN) * DEADBAND;
 
   // if target is in the middle, don't move
-  if (abs(avgRight - avgLeft) < dynamicDeadband ) {
+  if (abs(state.avgRight - state.avgLeft) < dynamicDeadband ) {
     return;
   }
 
   float ang = 0;
 
   // move towards stronger signal
-  if (avgRight > avgLeft) {
+  if (state.avgRight > state.avgLeft) {
 
   #if defined(EXPONENTIAL)
-    float x = float(avgRight - avgLeft);
+    float x = float(state.avgRight - state.avgLeft);
     x = x * x / 500;
     ang = x * SERVO_DIRECTION * -1;
   #endif
 
   #if defined(RELATIVE)
-    ang = float(avgRight / avgLeft) * (SERVO_DIRECTION * -1);
+    ang = float(state.avgRight / state.avgLeft) * (SERVO_DIRECTION * -1);
   #endif
 
   #if defined(SIGMOID)
-    float x = float(avgRight - avgLeft) / 10;
+    float x = float(state.avgRight - state.avgLeft) / 10;
     x = SERVO_MAX_STEP / (1+ exp(-SIGMOID_SLOPE * x + SIGMOID_OFFSET));
     ang = x * SERVO_DIRECTION * -1;
   #endif
 
   #if defined(PROPORTIONAL)
-    float x = float(avgRight - avgLeft) / 10;
+    float x = float(state.avgRight - state.avgLeft) / 10;
     ang = x * SERVO_DIRECTION * -1;
   #endif
   }
   else {
 
   #if defined(EXPONENTIAL)
-    float x = float(avgLeft - avgRight);
+    float x = float(state.avgLeft - state.avgRight);
     x = x * x / 500;
     ang = x * SERVO_DIRECTION;
   #endif
 
   #if defined(RELATIVE)
-    ang = float(avgLeft / avgRight) * SERVO_DIRECTION;
+    ang = float(state.avgLeft / state.avgRight) * SERVO_DIRECTION;
   #endif
 
   #if defined(SIGMOID)
-    float x = float(avgLeft - avgRight) / 10;
+    float x = float(state.avgLeft - state.avgRight) / 10;
     x = SERVO_MAX_STEP / (1+ exp(-SIGMOID_SLOPE * x + SIGMOID_OFFSET));
     ang = x * SERVO_DIRECTION;
   #endif
 
   #if defined(PROPORTIONAL)
-    float x = float(avgLeft - avgRight) / 10;
+    float x = float(state.avgLeft - state.avgRight) / 10;
     ang = x * SERVO_DIRECTION;
   #endif
   }
@@ -204,30 +207,39 @@ void mainLoop() {
 
   // move servo by n degrees
   movePanBy(ang);
+  sendStatus();
+}
 
-
-  if (debug) {
-//    Serial.print("RSSI%: ");
-//    Serial.print(map(avgLeft, RSSI_MIN, RSSI_MAX, 0, 100));
-//    Serial.print(", ");
-//    Serial.print(map(avgRight, RSSI_MIN, RSSI_MAX, 0, 100));
-
-    // raw rssi values, use these for RSSI_MIN and RSSI_MAX
-    Serial.print("Calibration - left: ");
-    Serial.print(avgLeft);
-    Serial.print(" right: ");
-    Serial.print(avgRight);
-
-    Serial.print(" servo-angle: ");
-    Serial.println(anglePan);
+uint8_t crc(const uint8_t* buf, size_t len)
+{
+  uint8_t res = 0;
+  for(size_t i=0; i < len; ++i)
+  {
+    res += buf[i];
   }
+  return res;
+}
+
+void sendStatus()
+{
+  struct StatusMessage {
+    unsigned long timestamp;
+    State state;
+  };
+  StatusMessage status;
+  status.timestamp = millis();
+  status.state = state;
+  Serial.write('{');
+  Serial.write((const uint8_t*)&status, sizeof(StatusMessage));
+  Serial.write(crc((const uint8_t*)&status, sizeof(StatusMessage)));
+  Serial.write('}');
 }
 
 void movePanBy(float angle) {
 
-  anglePan += angle;
-  anglePan = limit(SERVO_MIN, SERVO_MAX, anglePan);
-  servoPan.write(anglePan);
+  state.anglePan += angle;
+  state.anglePan = limit(SERVO_MIN, SERVO_MAX, state.anglePan);
+  servoPan.write(state.anglePan);
 }
 
 void measureRSSI() {
