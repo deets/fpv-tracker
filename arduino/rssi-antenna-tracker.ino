@@ -13,17 +13,16 @@
  *  Uncomment one
  */
 //#define EXPONENTIAL       // OK
-//#define RELATIVE          // old, don't use
 #define SIGMOID             // Best
 //#define PROPORTIONAL      // twitchy
 
 #define SIGMOID_SLOPE       1
 #define SIGMOID_OFFSET      4
 
-#if !defined(EXPONENTIAL) ^ !defined(SIGMOID) ^ !defined(PROPORTIONAL) ^ !defined(RELATIVE)
+#if defined(EXPONENTIAL) || defined(SIGMOID) || !defined(PROPORTIONAL)
 // all good
 #else
-  #error "Please define ONE tracking curve: EXPONENTIAL, SIGMOID, PROPORTIONAL, RELATIVE"
+  #error "Please define ONE tracking curve: EXPONENTIAL, SIGMOID, PROPORTIONAL"
 #endif
 
 
@@ -162,10 +161,6 @@ void mainLoop() {
     ang = x * SERVO_DIRECTION * -1;
   #endif
 
-  #if defined(RELATIVE)
-    ang = float(state.avgRight / state.avgLeft) * (SERVO_DIRECTION * -1);
-  #endif
-
   #if defined(SIGMOID)
     float x = float(state.avgRight - state.avgLeft) / 10;
     x = SERVO_MAX_STEP / (1+ exp(-SIGMOID_SLOPE * x + SIGMOID_OFFSET));
@@ -183,10 +178,6 @@ void mainLoop() {
     float x = float(state.avgLeft - state.avgRight);
     x = x * x / 500;
     ang = x * SERVO_DIRECTION;
-  #endif
-
-  #if defined(RELATIVE)
-    ang = float(state.avgLeft / state.avgRight) * SERVO_DIRECTION;
   #endif
 
   #if defined(SIGMOID)
