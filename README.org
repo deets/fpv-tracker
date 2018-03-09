@@ -1,0 +1,5 @@
+* FPV Tracker
+
+A simple RSSI tracker based on the FR632 diversity receiver.
+
+[[https://github.com/andreiva/simple-rssi-antenna-tracker][Shout out to Andrei Valnik]] for providing the inspiration and initial source code.
