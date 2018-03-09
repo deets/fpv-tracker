@@ -115,7 +115,7 @@ void setup() {
   servoPan.write(90);
 
   state = {
-    .mode = Mode::RUNNING,
+    .mode = Mode::TRACKING,
     .anglePan = 90.0
   };
 

@@ -107,6 +107,16 @@ class MinMaxer(QtCore.QObject):
             self.max_changed.emit(self._max)
 
 
+
+class ModeSwitcher(QtCore.QObject):
+
+    mode_changed = QtCore.pyqtSignal(int)
+
+
+    def set_mode(self, mode):
+        self.mode_changed.emit(mode)
+
+
 def main():
     app = QtWidgets.QApplication(sys.argv)
 
@@ -157,6 +167,9 @@ def main():
 
     protocol.status_message.connect(lambda message: main_window.servo_angle.setText("{:.2f}".format(servo_value(message))))
 
+    mode_switcher = ModeSwitcher()
+    mode_switcher.mode_changed.connect(main_window.mode_stack.setCurrentIndex)
+    protocol.status_message.connect(lambda message: mode_switcher.set_mode(message.mode))
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
