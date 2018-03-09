@@ -94,7 +94,15 @@ uint16_t rssi_right_array[FIR_SIZE];
 Timer timer;
 Servo servoPan;
 
+enum Mode : uint16_t
+{
+  MANUAL,
+  CONFIG,
+  TRACKING
+};
+
 struct State {
+  Mode mode;
   float anglePan;
   uint16_t avgLeft;
   uint16_t avgRight;
@@ -107,6 +115,7 @@ void setup() {
   servoPan.write(90);
 
   state = {
+    .mode = Mode::RUNNING,
     .anglePan = 90.0
   };
 

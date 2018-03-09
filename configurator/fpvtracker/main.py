@@ -1,6 +1,7 @@
 import os
 import sys
 import bisect
+import operator
 
 from PyQt5 import QtGui, QtSvg, QtWidgets, QtCore
 from PyQt5.uic import loadUi
@@ -51,14 +52,12 @@ class ValueRenderer(QtCore.QObject):
 
 
     def _status_message(self, message):
-        ts, angle, left, right = message
-        ts /= 1000.0
-        self._latest_timestamp = ts
+        ts = self._latest_timestamp = message.timestamp
         cutoff = ts - self._history_length
-        self._messages.append((ts, angle, left, right))
+        self._messages.append(message)
         index = bisect.bisect_left(
             self._messages,
-            (cutoff, -1, -1, -1),
+            (cutoff, -1, -1, -1, -1),
         )
         self._messages = self._messages[index:]
 
@@ -119,9 +118,9 @@ def main():
 
     main_window.show()
 
-    servo_value = lambda message: message[1]
-    left_value = lambda message: message[2]
-    right_value = lambda message: message[3]
+    servo_value = operator.attrgetter("angle")
+    left_value = operator.attrgetter("left")
+    right_value = operator.attrgetter("right")
 
     left_renderer = ValueRenderer(
         protocol,
@@ -146,12 +145,12 @@ def main():
         0, 180,
     )
 
-    left_mm = MinMaxer(lambda message: message[2])
+    left_mm = MinMaxer(left_value)
     protocol.status_message.connect(left_mm.value)
     left_mm.min_changed.connect(lambda v: main_window.left_rssi_min.setText(str(v)))
     left_mm.max_changed.connect(lambda v: main_window.left_rssi_max.setText(str(v)))
 
-    right_mm = MinMaxer(lambda message: message[3])
+    right_mm = MinMaxer(right_value)
     protocol.status_message.connect(right_mm.value)
     right_mm.min_changed.connect(lambda v: main_window.right_rssi_min.setText(str(v)))
     right_mm.max_changed.connect(lambda v: main_window.right_rssi_max.setText(str(v)))

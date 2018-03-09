@@ -1,7 +1,10 @@
 import struct
+from collections import namedtuple
 
 from PyQt5 import QtSerialPort, QtCore
 
+
+Message = namedtuple("Message", "timestamp mode angle left right")
 
 class SerialPortReader(QtCore.QObject):
 
@@ -37,7 +40,7 @@ class SerialPortReader(QtCore.QObject):
 
 
 class SerialProtocol(QtCore.QObject):
-    PAYLOAD = "IfHH" # timestamp, angle, left, right
+    PAYLOAD = "<IHfHH" # timestamp, mode, angle, left, right
     LAYOUT =  PAYLOAD + "B"
 
     status_message = QtCore.pyqtSignal('PyQt_PyObject')
@@ -76,4 +79,14 @@ class SerialProtocol(QtCore.QObject):
         h = h & 0xff
         if h == crc:
             # successfully decoded a message
-            self.status_message.emit(struct.unpack(self.PAYLOAD, message[:-1]))
+            timestamp, mode, angle, left, right = struct.unpack(self.PAYLOAD, message[:-1])
+            timestamp /= 1000.0 # convert to seconds
+            self.status_message.emit(
+                Message(
+                    timestamp,
+                    mode,
+                    angle,
+                    left,
+                    right,
+                )
+            )
