@@ -8,12 +8,13 @@ from PyQt5.uic import loadUi
 from .communication import SerialPortReader, SerialProtocol
 
 
-class RSSIRenderer(QtCore.QObject):
+class ValueRenderer(QtCore.QObject):
     MARGIN = 0.95
 
-    def __init__(self, protocol, view, color, selector, history_length=10, parent=None):
+    def __init__(self, protocol, view, color, selector, min_, max_, history_length=10, parent=None):
         super().__init__(parent)
         self._selector = selector
+        self._min, self._max = min_, max_
         protocol.status_message.connect(self._status_message)
         self._view = view
         self._history_length = history_length
@@ -22,11 +23,11 @@ class RSSIRenderer(QtCore.QObject):
 
         self._scene = QtWidgets.QGraphicsScene(self._view)
 
-        pen_width = self._view.width() * .9 / self._history_length
+        pen_width = self._view.width() * self.MARGIN / self._history_length
 
         path = QtGui.QPainterPath()
-        path.moveTo(-10, 0)
-        path.lineTo(0, 1023)
+        path.moveTo(-history_length, min_)
+        path.lineTo(0, max_)
         pen = QtGui.QPen()
         pen.setWidth(2 / pen_width)
         pen.setColor(color)
@@ -44,7 +45,7 @@ class RSSIRenderer(QtCore.QObject):
 
     def _fit_view(self):
         t = QtGui.QTransform()
-        sx, sy = self._view.width() / self._history_length, -self._view.height() * self.MARGIN / 1024,
+        sx, sy = self._view.width() / self._history_length, -self._view.height() * self.MARGIN / self._max,
         t.scale(sx, sy)
         self._view.setTransform(t)
 
@@ -54,13 +55,12 @@ class RSSIRenderer(QtCore.QObject):
         ts /= 1000.0
         self._latest_timestamp = ts
         cutoff = ts - self._history_length
-        self._messages.append((ts, left, right))
+        self._messages.append((ts, angle, left, right))
         index = bisect.bisect_left(
             self._messages,
-            (cutoff, -1, -1),
+            (cutoff, -1, -1, -1),
         )
         self._messages = self._messages[index:]
-
 
         if len(self._messages):
             path = QtGui.QPainterPath()
@@ -119,20 +119,31 @@ def main():
 
     main_window.show()
 
-    left_value = lambda message: message[1]
-    right_value = lambda message: message[2]
+    servo_value = lambda message: message[1]
+    left_value = lambda message: message[2]
+    right_value = lambda message: message[3]
 
-    left_renderer = RSSIRenderer(
+    left_renderer = ValueRenderer(
         protocol,
         main_window.left_rssi_view,
         QtGui.QColor(0, 255, 0),
         left_value,
+        0, 1023,
     )
-    right_renderer = RSSIRenderer(
+    right_renderer = ValueRenderer(
         protocol,
         main_window.right_rssi_view,
         QtGui.QColor(255, 0, 0),
         right_value,
+        0, 1023,
+    )
+
+    servo_renderer = ValueRenderer(
+        protocol,
+        main_window.servo_view,
+        QtGui.QColor(0, 0, 255),
+        servo_value,
+        0, 180,
     )
 
     left_mm = MinMaxer(lambda message: message[2])
@@ -144,6 +155,8 @@ def main():
     protocol.status_message.connect(right_mm.value)
     right_mm.min_changed.connect(lambda v: main_window.right_rssi_min.setText(str(v)))
     right_mm.max_changed.connect(lambda v: main_window.right_rssi_max.setText(str(v)))
+
+    protocol.status_message.connect(lambda message: main_window.servo_angle.setText("{:.2f}".format(servo_value(message))))
 
     sys.exit(app.exec_())
 

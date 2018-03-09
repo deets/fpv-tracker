@@ -37,7 +37,7 @@ class SerialPortReader(QtCore.QObject):
 
 
 class SerialProtocol(QtCore.QObject):
-    PAYLOAD = "IfHH"
+    PAYLOAD = "IfHH" # timestamp, angle, left, right
     LAYOUT =  PAYLOAD + "B"
 
     status_message = QtCore.pyqtSignal('PyQt_PyObject')
