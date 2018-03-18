@@ -35,6 +35,9 @@
 #define LEFT_RSSI_PIN       0     // analog RSSI measurement pin
 #define RIGHT_RSSI_PIN      1
 #define PAN_SERVO_PIN       5     // Pan servo pin
+#define RIGHT_LED_PIN       7     // right indicator LED
+#define LEFT_LED_PIN        9     // right indicator LED
+#define MODE_SELECTOR_PIN   8     // mode selector button
 
 /*
    There is going to be some difference in receivers,
@@ -97,9 +100,59 @@ Servo servoPan;
 enum Mode : uint16_t
 {
   MANUAL,
-  CONFIG,
   TRACKING
 };
+
+class Button
+{
+public:
+  void setup(int pin, int active, unsigned long debounce=50)
+  {
+    _pin = pin;
+    _active = active;
+    _pressed = false;
+    _debounce = debounce;
+    _clear_to_read = millis();
+  }
+
+  bool pressed()
+  {
+    bool result = false;
+    // debouncinc
+    if(millis() < _clear_to_read)
+    {
+      return false;
+    }
+
+    const auto current_state = digitalRead(_pin);
+    if(!_pressed)
+    {
+      if(current_state == _active)
+      {
+        _pressed = true;
+        _clear_to_read = millis() + _debounce;
+        result = true;
+      }
+    }
+    else
+    {
+      if(current_state != _active)
+      {
+        _pressed = false;
+      }
+    }
+    return result;
+  }
+
+private:
+
+  int _pin;
+  int _active;
+  bool _pressed;
+  unsigned long _clear_to_read;
+  unsigned long _debounce;
+};
+
 
 struct State {
   Mode mode;
@@ -109,13 +162,14 @@ struct State {
 };
 
 State state;
+Button mode_button;
 
 void setup() {
   servoPan.attach(PAN_SERVO_PIN);
   servoPan.write(90);
 
   state = {
-    .mode = Mode::TRACKING,
+    .mode = Mode::MANUAL,
     .anglePan = 90.0
   };
 
@@ -128,18 +182,50 @@ void setup() {
   Serial.begin(115200);
   timer.every(50, mainLoop);
   timer.every(5, measureRSSI);
+  pinMode(RIGHT_LED_PIN, OUTPUT);
+  pinMode(LEFT_LED_PIN, OUTPUT);
+  pinMode(MODE_SELECTOR_PIN, INPUT_PULLUP);
+  mode_button.setup(MODE_SELECTOR_PIN, LOW, 200);
 }
 
 
-void loop() {
-
+void loop()
+{
+  if(mode_button.pressed())
+  {
+    state.mode = state.mode == Mode::MANUAL ? Mode::TRACKING : Mode::MANUAL;
+  }
   timer.update();
 
 }
 
 
-void mainLoop() {
+void mainLoop()
+{
+  switch(state.mode)
+  {
+  case Mode::MANUAL:
+    digitalWrite(LEFT_LED_PIN, HIGH);
+    digitalWrite(RIGHT_LED_PIN, LOW);
+    manual();
+    break;
+  case Mode::TRACKING:
+    digitalWrite(LEFT_LED_PIN, LOW);
+    digitalWrite(RIGHT_LED_PIN, HIGH);
+    tracking();
+    break;
+  }
+}
 
+
+void manual()
+{
+  state.anglePan = limit(SERVO_MIN, SERVO_MAX, 90.0);
+  servoPan.write(state.anglePan);
+}
+
+
+void tracking() {
   state.avgLeft = max(avg(rssi_left_array, FIR_SIZE) + RSSI_OFFSET_LEFT, RSSI_MIN);
   state.avgRight = max(avg(rssi_right_array, FIR_SIZE) + RSSI_OFFSET_RIGHT, RSSI_MIN);
 
